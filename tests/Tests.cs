@@ -712,6 +712,8 @@ internal static class Tests
             Check(!ContainsUtf16(rewritten, "https://api.potatotv.asia/v1/report"), "流水线：报告地址明文消失");
             Check(!ContainsUtf16(rewritten, "guard-fail-token"), "流水线：异常文案明文消失");
             Check(!ContainsUtf16(rewritten, "startup-ok"), "流水线：入口字符串明文消失");
+            Check(!ContainsUtf16(rewritten, "https://dl.potatotv.asia/files/version.json"),
+                "流水线：const 字段的 Constant 行也加密");
 
             int bodyLength = rewritten.Length - IntegrityCheck.TrailerSize;
             Check(rewritten.AsSpan(bodyLength).SequenceEqual(SHA256.HashData(rewritten.AsSpan(0, bodyLength))),
@@ -726,6 +728,9 @@ internal static class Tests
             Assembly asm = LoadInto(alc, output, srcDir);
             Equal(Require(asm, "Pco.Tests.Fixture.Startup").GetMethod("OnStartup")!.Invoke(null, null),
                 "startup-ok", "流水线：入口方法经注入 + 代理 + 平坦化后仍返回原值");
+
+            Equal(Require(asm, "Pco.Tests.Fixture.ConstantHolder").GetMethod("Read")!.Invoke(null, null),
+                "https://dl.potatotv.asia/files/version.json", "流水线：const 用法内联后仍返回原值");
 
             object renamed = Activator.CreateInstance(Require(asm, "Pco.Tests.Fixture.Renamed"))!;
             Equal(Require(asm, "Pco.Tests.Fixture.Renamed").GetMethod("Bump")!.Invoke(renamed, null),

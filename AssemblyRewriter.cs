@@ -78,7 +78,7 @@ internal sealed class AssemblyRewriter
     /// <summary>是否真的注入过反调试调用。</summary>
     public bool AntiDebugInjected { get; private set; }
 
-    /// <summary>被加密的字符串字面量个数（统计用）。</summary>
+    /// <summary>被加密的字符串字面量个数（#US 堆的 ldstr 与 const 字段的 Constant 行，统计用）。</summary>
     public int EncryptedStrings { get; private set; }
 
     /// <summary>被改写过的方法数（统计用）。</summary>
@@ -933,10 +933,11 @@ internal sealed class AssemblyRewriter
         // HasConstant 编码：Field(0) -> Param(1) -> Property(2)，按这个顺序写入行号才对齐。
         foreach (FieldDefinitionHandle h in _md.FieldDefinitions)
         {
-            ConstantHandle c = _md.GetFieldDefinition(h).GetDefaultValue();
+            FieldDefinition fd = _md.GetFieldDefinition(h);
+            ConstantHandle c = fd.GetDefaultValue();
             if (!c.IsNil)
             {
-                _builder.AddConstant(h, ReadConstantValue(_md.GetConstant(c)));
+                _builder.AddConstant(h, FieldConstantValue(fd, _md.GetConstant(c)));
             }
         }
         foreach (MethodDefinitionHandle h in _md.MethodDefinitions)
@@ -981,6 +982,26 @@ internal sealed class AssemblyRewriter
             ConstantTypeCode.NullReference => null,
             _ => throw new BadImageFormatException($"未知常量类型 {c.TypeCode}"),
         };
+    }
+
+    /// <summary>
+    /// const 字段的字面量存在 Constant 表里，不在 #US 堆，<see cref="EncryptLdstr"/> 扫不到它。
+    /// 用到 const 的地方编译期都已内联成 ldstr（已被加密），运行期不会再去读这个值，
+    /// 所以这里把常量值本身也换成密文，反编译才看不到明文。<b>只动字段</b>：
+    /// 参数默认值是在调用方省略实参时由运行时读取的，改成密文就真的改变行为了。
+    /// </summary>
+    private object? FieldConstantValue(FieldDefinition field, Constant constant)
+    {
+        object? value = ReadConstantValue(constant);
+        if (EncryptStrings
+            && value is string text
+            && text.Length >= 2
+            && (field.Attributes & FieldAttributes.Literal) != 0)
+        {
+            EncryptedStrings++;
+            return StringEncryptor.Encrypt(text, _stringKey);
+        }
+        return value;
     }
 
     private void AddCustomAttributes()

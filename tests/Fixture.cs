@@ -135,6 +135,17 @@ public static class Flattened
 }
 
 /// <summary>
+/// const 字面量存在 Constant 表、不在 #US 堆，ldstr 那一轮扫不到它。用法在编译期已内联成 ldstr，
+/// 运行期没人再读这个值，所以常量值本身也必须一并加密，否则不用反射也能在反编译里看到明文。
+/// </summary>
+public static class ConstantHolder
+{
+    public const string Endpoint = "https://dl.potatotv.asia/files/version.json";
+
+    public static string Read() => Endpoint;
+}
+
+/// <summary>
 /// 模拟 WPF 的 App.OnStartup：反调试注入会在它开头插一条 <c>__AntiDebug.Start()</c>。
 /// 原来带 try/catch，顺带验证「前置插指令后异常边界跟着平移」。
 /// </summary>
